@@ -250,6 +250,38 @@ const docTemplate = `{
                 }
             }
         },
+        "/avatar-proxy": {
+            "get": {
+                "description": "Fetches an avatar image server-side with the correct Referer header for CDNs that have hotlink protection.",
+                "tags": [
+                    "General"
+                ],
+                "summary": "Proxy an avatar image",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "the avatar URL to proxy",
+                        "name": "url",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request"
+                    },
+                    "502": {
+                        "description": "Bad Gateway"
+                    }
+                }
+            }
+        },
         "/badges/{repo_id}/cc.xml": {
             "get": {
                 "description": "CCMenu displays the pipeline status of projects on a CI server as an item in the Mac's menu bar.\nMore details on how to install, you can find at http://ccmenu.org/\nThe response format adheres to CCTray v1 Specification, https://cctray.org/v1/",
@@ -6244,6 +6276,7 @@ const docTemplate = `{
                 "forgejo",
                 "bitbucket",
                 "bitbucket-dc",
+                "atomgit",
                 "addon"
             ],
             "x-enum-varnames": [
@@ -6253,6 +6286,7 @@ const docTemplate = `{
                 "ForgeTypeForgejo",
                 "ForgeTypeBitbucket",
                 "ForgeTypeBitbucketDatacenter",
+                "ForgeTypeAtomGit",
                 "ForgeTypeAddon"
             ]
         },
