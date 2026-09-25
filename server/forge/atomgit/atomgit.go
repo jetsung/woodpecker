@@ -699,9 +699,10 @@ func (c *AtomGit) OrgMembership(ctx context.Context, u *model.User, org string) 
 	if status >= http.StatusBadRequest {
 		return &model.OrgPerm{}, nil
 	}
-	// AtomGit does not expose detailed permission levels via this endpoint;
-	// membership is enough to return admin capability conservatively.
-	return &model.OrgPerm{Member: true, Admin: false}, nil
+	// AtomGit's membership endpoint carries no permission levels, so a
+	// member is returned as admin too: org secret/registry management
+	// (MustOrgMember(true)) would otherwise be unusable for org repos.
+	return &model.OrgPerm{Member: true, Admin: true}, nil
 }
 
 // Org fetches an organization (or user) from AtomGit.
