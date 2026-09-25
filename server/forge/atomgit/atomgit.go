@@ -240,10 +240,10 @@ func (c *AtomGit) getRepoByIDScan(ctx context.Context, u *model.User, remoteID m
 		}
 		for _, r := range repos {
 			if string(r.ID) == string(remoteID) {
-			// The /user/repos summary omits fields the UI needs (html_url, ...),
-			// so upgrade to the full repository object via GET /repos/:owner/:name.
-			// The summary has no namespace object, so derive owner/name from
-			// path_with_namespace / full_name.
+				// The /user/repos summary omits fields the UI needs (html_url, ...),
+				// so upgrade to the full repository object via GET /repos/:owner/:name.
+				// The summary has no namespace object, so derive owner/name from
+				// path_with_namespace / full_name.
 				fullName := r.FullName
 				if fullName == "" {
 					fullName = r.PathWithNamespace
@@ -709,7 +709,16 @@ func (c *AtomGit) Org(ctx context.Context, u *model.User, org string) (*model.Or
 	apiURL := fmt.Sprintf("%s%s/users/%s", c.url, apiPath, org)
 	out := new(user)
 	if err := c.get(ctx, u.AccessToken, apiURL, out); err != nil {
-		return nil, err
+		// /users/{name} only covers personal accounts; an enterprise namespace
+		// returns 404 there ("用户不存在"), so fall back to /orgs/{name}.
+		orgOut := new(enterprise)
+		if err2 := c.get(ctx, u.AccessToken, fmt.Sprintf("%s%s/orgs/%s", c.url, apiPath, org), orgOut); err2 != nil {
+			return nil, err
+		}
+		return &model.Org{
+			Name:    orgOut.Login,
+			Private: !orgOut.Public.Bool(),
+		}, nil
 	}
 	return &model.Org{
 		Name:   out.Username,

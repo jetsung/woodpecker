@@ -159,6 +159,18 @@ type user struct {
 	Company   string `json:"company"`
 }
 
+// enterprise is the AtomGit enterprise/organization payload returned by
+// /orgs/{name}. Personal accounts are not served by this endpoint.
+type enterprise struct {
+	ID        id      `json:"id"`
+	Login     string  `json:"login"`
+	Name      string  `json:"name"`
+	Path      string  `json:"path"`
+	HTMLURL   string  `json:"html_url"`
+	AvatarURL string  `json:"avatar_url"`
+	Public    boolInt `json:"public"`
+}
+
 // repository is the AtomGit repository payload returned by the API. The json
 // tags accept several aliased URL fields (git_http_url / git_ssh_url / web_url
 // / homepage / url and http_url_to_repo / ssh_url_to_repo / html_url) because

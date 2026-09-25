@@ -103,6 +103,7 @@ func PostRepo(c *gin.Context) {
 
 	from, err := _forge.Repo(c, user, forgeRemoteID, "", "")
 	if err != nil {
+		log.Error().Err(err).Msgf("could not fetch repository %s from forge", forgeRemoteID)
 		c.String(http.StatusInternalServerError, "Could not fetch repository from forge.")
 		return
 	}
