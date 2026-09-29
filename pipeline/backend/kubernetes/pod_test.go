@@ -202,6 +202,26 @@ func TestPodHostnameSanitized(t *testing.T) {
 	assert.Equal(t, "update-repos", pod.Spec.Hostname)
 }
 
+func TestPodClusterDomain(t *testing.T) {
+	step := &types.Step{
+		Name:  "build",
+		Image: "alpine:latest",
+		UUID:  "01he8bebctabr3kgk0qj36d2me-0",
+	}
+
+	pod, err := mkPod(step, &config{
+		Namespace:     "woodpecker",
+		ClusterDomain: "k8s.example.com",
+	}, "wp-01he8bebctabr3kgk0qj36d2me-0", "linux/amd64", BackendOptions{}, taskUUID)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"wp-hsvc-11301.woodpecker.svc.k8s.example.com"}, pod.Spec.DNSConfig.Searches)
+
+	// an unset cluster domain falls back to the Kubernetes default
+	pod, err = mkPod(step, &config{Namespace: "woodpecker"}, "wp-01he8bebctabr3kgk0qj36d2me-0", "linux/amd64", BackendOptions{}, taskUUID)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"wp-hsvc-11301.woodpecker.svc.cluster.local"}, pod.Spec.DNSConfig.Searches)
+}
+
 func TestTinyPod(t *testing.T) {
 	const expected = `
 	{
@@ -244,7 +264,7 @@ func TestTinyPod(t *testing.T) {
 						},
 						{
 							"name": "CI_SCRIPT",
-							"value": "CmlmIFsgLW4gIiRDSV9ORVRSQ19NQUNISU5FIiBdOyB0aGVuCmNhdCA8PEVPRiA+ICRIT01FLy5uZXRyYwptYWNoaW5lICRDSV9ORVRSQ19NQUNISU5FCmxvZ2luICRDSV9ORVRSQ19VU0VSTkFNRQpwYXNzd29yZCAkQ0lfTkVUUkNfUEFTU1dPUkQKRU9GCmNobW9kIDA2MDAgJEhPTUUvLm5ldHJjCmZpCnVuc2V0IENJX05FVFJDX1VTRVJOQU1FCnVuc2V0IENJX05FVFJDX1BBU1NXT1JECnVuc2V0IENJX1NDUklQVApta2RpciAtcCAiL3dvb2RwZWNrZXIvc3JjIgpjZCAiL3dvb2RwZWNrZXIvc3JjIgoKZWNobyArICdncmFkbGUgYnVpbGQnCmdyYWRsZSBidWlsZAo="
+							"value": "CmlmIFsgLW4gIiRDSV9ORVRSQ19NQUNISU5FIiBdOyB0aGVuCmNhdCA8PEVPRiA+ICRIT01FLy5uZXRyYwptYWNoaW5lICRDSV9ORVRSQ19NQUNISU5FCmxvZ2luICRDSV9ORVRSQ19VU0VSTkFNRQpwYXNzd29yZCAkQ0lfTkVUUkNfUEFTU1dPUkQKRU9GCmNobW9kIDA2MDAgJEhPTUUvLm5ldHJjCmZpCnVuc2V0IENJX05FVFJDX1VTRVJOQU1FCnVuc2V0IENJX05FVFJDX1BBU1NXT1JECnVuc2V0IENJX1NDUklQVApta2RpciAtcCAiL3dvb2RwZWNrZXIvc3JjIgpjZCAiL3dvb2RwZWNrZXIvc3JjIgoKZWNobyAn4pa2ICAnJ2dyYWRsZSBidWlsZCcKZ3JhZGxlIGJ1aWxkCg=="
 						}
 					],
 					"resources": {},
@@ -382,7 +402,7 @@ func TestFullPod(t *testing.T) {
 						},
 						{
 							"name": "CI_SCRIPT",
-							"value": "CmlmIFsgLW4gIiRDSV9ORVRSQ19NQUNISU5FIiBdOyB0aGVuCmNhdCA8PEVPRiA+ICRIT01FLy5uZXRyYwptYWNoaW5lICRDSV9ORVRSQ19NQUNISU5FCmxvZ2luICRDSV9ORVRSQ19VU0VSTkFNRQpwYXNzd29yZCAkQ0lfTkVUUkNfUEFTU1dPUkQKRU9GCmNobW9kIDA2MDAgJEhPTUUvLm5ldHJjCmZpCnVuc2V0IENJX05FVFJDX1VTRVJOQU1FCnVuc2V0IENJX05FVFJDX1BBU1NXT1JECnVuc2V0IENJX1NDUklQVApta2RpciAtcCAiL3dvb2RwZWNrZXIvc3JjIgpjZCAiL3dvb2RwZWNrZXIvc3JjIgoKZWNobyArICdnbyBnZXQnCmdvIGdldAoKZWNobyArICdnbyB0ZXN0JwpnbyB0ZXN0Cg=="
+							"value": "CmlmIFsgLW4gIiRDSV9ORVRSQ19NQUNISU5FIiBdOyB0aGVuCmNhdCA8PEVPRiA+ICRIT01FLy5uZXRyYwptYWNoaW5lICRDSV9ORVRSQ19NQUNISU5FCmxvZ2luICRDSV9ORVRSQ19VU0VSTkFNRQpwYXNzd29yZCAkQ0lfTkVUUkNfUEFTU1dPUkQKRU9GCmNobW9kIDA2MDAgJEhPTUUvLm5ldHJjCmZpCnVuc2V0IENJX05FVFJDX1VTRVJOQU1FCnVuc2V0IENJX05FVFJDX1BBU1NXT1JECnVuc2V0IENJX1NDUklQVApta2RpciAtcCAiL3dvb2RwZWNrZXIvc3JjIgpjZCAiL3dvb2RwZWNrZXIvc3JjIgoKZWNobyAn4pa2ICAnJ2dvIGdldCcKZ28gZ2V0CgplY2hvICfilrYgICcnZ28gdGVzdCcKZ28gdGVzdAo="
 						},
 						{
 							"name": "SHELL",
@@ -537,6 +557,7 @@ func TestFullPod(t *testing.T) {
 		PodNodeSelectorAllowFromStep:    true,
 		SecurityContext:                 SecurityContextConfig{RunAsNonRoot: false},
 		ServiceAccountNameAllowFromStep: true,
+		RuntimeClassAllowFromStep:       true,
 	},
 		"wp-01he8bebctabr3kgk0qj36d2me-0",
 		"linux/amd64",

@@ -82,7 +82,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "the agent's data (only 'name' and 'no_schedule' are read)",
+                        "description": "the agent's data (only 'name', 'no_schedule' and 'filters' are read)",
                         "name": "agent",
                         "in": "body",
                         "required": true,
@@ -1171,7 +1171,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "the agent's data (only 'name' and 'no_schedule' are read)",
+                        "description": "the agent's data (only 'name', 'no_schedule' and 'filters' are read)",
                         "name": "agent",
                         "in": "body",
                         "required": true,
@@ -2859,6 +2859,56 @@ const docTemplate = `{
                 "responses": {
                     "204": {
                         "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/repos/{repo_id}/logs/{pipeline_number}/{step_id}/download": {
+            "get": {
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Pipeline logs"
+                ],
+                "summary": "Download logs for a pipeline step",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "Bearer \u003cpersonal access token\u003e",
+                        "description": "Insert your personal access token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "the repository id",
+                        "name": "repo_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "the number of the pipeline",
+                        "name": "pipeline_number",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "the step id",
+                        "name": "step_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -4669,6 +4719,13 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "filters": {
+                    "description": "Server side enforced agent filters",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "id": {
                     "type": "integer"
                 },
@@ -4833,6 +4890,9 @@ const docTemplate = `{
                 "finished": {
                     "type": "integer"
                 },
+                "full_name": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "integer"
                 },
@@ -4891,6 +4951,13 @@ const docTemplate = `{
                     "description": "public url for oauth if different from url",
                     "type": "string"
                 },
+                "orgs": {
+                    "description": "members of those orgs may log in using this forge, in addition to the globally allowed ones",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "skip_verify": {
                     "type": "boolean"
                 },
@@ -4921,6 +4988,13 @@ const docTemplate = `{
                 "oauth_host": {
                     "description": "public url for oauth if different from url",
                     "type": "string"
+                },
+                "orgs": {
+                    "description": "members of those orgs may log in using this forge, in addition to the globally allowed ones",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "skip_verify": {
                     "type": "boolean"
@@ -5188,6 +5262,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "branch": {
+                    "type": "string"
+                },
+                "message": {
                     "type": "string"
                 },
                 "variables": {
