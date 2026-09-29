@@ -1,11 +1,11 @@
-package atomgit
+package gitcode
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	"go.woodpecker-ci.org/woodpecker/v3/server/forge/atomgit/fixtures"
+	"go.woodpecker-ci.org/woodpecker/v3/server/forge/gitcode/fixtures"
 	"go.woodpecker-ci.org/woodpecker/v3/server/model"
 )
 

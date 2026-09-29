@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package atomgit
+package gitcode
 
 import (
 	"bytes"
@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"go.woodpecker-ci.org/woodpecker/v3/server"
-	"go.woodpecker-ci.org/woodpecker/v3/server/forge/atomgit/fixtures"
+	"go.woodpecker-ci.org/woodpecker/v3/server/forge/gitcode/fixtures"
 	"go.woodpecker-ci.org/woodpecker/v3/server/model"
 	"go.woodpecker-ci.org/woodpecker/v3/server/store"
 	store_mocks "go.woodpecker-ci.org/woodpecker/v3/server/store/mocks"
@@ -39,20 +39,20 @@ func TestNew(t *testing.T) {
 		SkipVerify: true,
 	})
 
-	f, _ := forge.(*AtomGit)
+	f, _ := forge.(*GitCode)
 	assert.Equal(t, "http://localhost:8080", f.url)
 	assert.True(t, f.skipVerify)
-	assert.Equal(t, "atomgit", f.Name())
+	assert.Equal(t, "gitcode", f.Name())
 }
 
-// Test_user_unmarshal verifies AtomGit's /api/v5/user payload decodes
-// correctly. AtomGit returns the id as an opaque hex string (e.g.
+// Test_user_unmarshal verifies GitCode's /api/v5/user payload decodes
+// correctly. GitCode returns the id as an opaque hex string (e.g.
 // "6638af02bbeee41d0fe74c35"), never a number, and the login field is
 // "login" rather than "username". This guards the login regression where the
 // id could not be unmarshaled.
 func Test_user_unmarshal(t *testing.T) {
 	var u user
-	// AtomGit returns id as a hex string and the login field as "login".
+	// GitCode returns id as a hex string and the login field as "login".
 	err := json.Unmarshal([]byte(`{"id":"6638af02bbeee41d0fe74c35","login":"someuser","name":"Some User","email":"a@b.com"}`), &u)
 	assert.NoError(t, err)
 	assert.Equal(t, "6638af02bbeee41d0fe74c35", u.ID.String())
@@ -63,7 +63,7 @@ func Test_user_unmarshal(t *testing.T) {
 	assert.Equal(t, "someuser", w.Login)
 }
 
-func Test_atomgit(t *testing.T) {
+func Test_gitcode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	s := httptest.NewServer(fixtures.Handler())
@@ -150,15 +150,15 @@ func Test_atomgit(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "localhost", netrc.Machine)
 		assert.Equal(t, fakeUser.Login, netrc.Login)
-		assert.Equal(t, model.ForgeTypeAtomGit, netrc.Type)
+		assert.Equal(t, model.ForgeTypeGitCode, netrc.Type)
 	})
 }
 
-// Test_atomgit_repoByIDScan_noNamespace reproduces the bug where the
+// Test_gitcode_repoByIDScan_noNamespace reproduces the bug where the
 // /user/repos summary omits the namespace object. Repo() must still upgrade
 // the matched summary to the full repository (via GET /repos/:owner/:name) so
 // that forge_url (html_url) and pr_enabled (has_pull_requests) are populated.
-func Test_atomgit_repoByIDScan_noNamespace(t *testing.T) {
+func Test_gitcode_repoByIDScan_noNamespace(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	mux := http.NewServeMux()
@@ -212,12 +212,12 @@ func Test_atomgit_repoByIDScan_noNamespace(t *testing.T) {
 	assert.True(t, repo.PREnabled)
 }
 
-// Test_atomgit_repo_byIDIncomplete verifies that when GET /repositories/:id
+// Test_gitcode_repo_byIDIncomplete verifies that when GET /repositories/:id
 // succeeds but returns an incomplete payload (no html_url), Repo() does NOT
 // trust it and instead upgrades to the full repository via GET /repos/:owner/:name
 // (or the /user/repos scan), so forge_url is still populated. This is the exact
 // bug that produced an empty forge_url -> "<button>" on the repo page.
-func Test_atomgit_repo_byIDIncomplete(t *testing.T) {
+func Test_gitcode_repo_byIDIncomplete(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	mux := http.NewServeMux()
@@ -261,10 +261,10 @@ func Test_atomgit_repo_byIDIncomplete(t *testing.T) {
 	assert.True(t, repo.PREnabled)
 }
 
-// Test_atomgit_BranchHead_preservesAPIURL verifies that when the branch
+// Test_gitcode_BranchHead_preservesAPIURL verifies that when the branch
 // endpoint DOES return an absolute commit web URL, BranchHead uses it as-is
 // rather than synthesizing one.
-func Test_atomgit_BranchHead_preservesAPIURL(t *testing.T) {
+func Test_gitcode_BranchHead_preservesAPIURL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	mux := http.NewServeMux()
@@ -273,7 +273,7 @@ func Test_atomgit_BranchHead_preservesAPIURL(t *testing.T) {
 			"name": "develop",
 			"commit": {
 				"id": "8240e6b568",
-				"url": "https://atomgit.com/test_name/repo_name/commits/detail/8240e6b568"
+				"url": "https://gitcode.com/test_name/repo_name/commits/detail/8240e6b568"
 			}
 		}`))
 	})
@@ -286,7 +286,7 @@ func Test_atomgit_BranchHead_preservesAPIURL(t *testing.T) {
 	commit, err := c.BranchHead(t.Context(), fakeUser, fakeRepo, "develop")
 	assert.NoError(t, err)
 	assert.Equal(t, "8240e6b568", commit.SHA)
-	assert.Equal(t, "https://atomgit.com/test_name/repo_name/commits/detail/8240e6b568", commit.ForgeURL)
+	assert.Equal(t, "https://gitcode.com/test_name/repo_name/commits/detail/8240e6b568", commit.ForgeURL)
 }
 
 var (
@@ -338,15 +338,15 @@ func Test_expandAvatar_CDN_to_proxy(t *testing.T) {
 		},
 		{
 			name:    "normal absolute URL stays unchanged",
-			repoURL: "https://atomgit.com/someuser",
-			rawURL:  "https://atomgit.com/avatar.png",
-			want:    "https://atomgit.com/avatar.png",
+			repoURL: "https://gitcode.com/someuser",
+			rawURL:  "https://gitcode.com/avatar.png",
+			want:    "https://gitcode.com/avatar.png",
 		},
 		{
 			name:    "relative URL resolved against repo URL",
-			repoURL: "https://atomgit.com/someuser",
+			repoURL: "https://gitcode.com/someuser",
 			rawURL:  "/uploads/avatar.png",
-			want:    "https://atomgit.com/uploads/avatar.png",
+			want:    "https://gitcode.com/uploads/avatar.png",
 		},
 		{
 			name:    "GitCode CDN URL converted to proxy",
@@ -355,10 +355,10 @@ func Test_expandAvatar_CDN_to_proxy(t *testing.T) {
 			want:    "/api/avatar-proxy?referer=https%3A%2F%2Fgitcode.com&url=https%3A%2F%2Fcdn-img.gitcode.com%2Fbf%2Fee%2Fb4f489e3933733e085b0f6ad0073345142d939d9e53c67d7e9445c66b71ad0a0.JPG%3Ftime%3D1705574695777",
 		},
 		{
-			name:    "AtomGit CDN URL converted to proxy",
-			repoURL: "https://atomgit.com/someuser",
-			rawURL:  "https://cdn-img.atomgit.com/some/path.jpg",
-			want:    "/api/avatar-proxy?referer=https%3A%2F%2Fatomgit.com&url=https%3A%2F%2Fcdn-img.atomgit.com%2Fsome%2Fpath.jpg",
+			name:    "GitCode CDN URL converted to proxy",
+			repoURL: "https://gitcode.com/someuser",
+			rawURL:  "https://cdn-img.gitcode.com/some/path.jpg",
+			want:    "/api/avatar-proxy?referer=https%3A%2F%2Fgitcode.com&url=https%3A%2F%2Fcdn-img.gitcode.com%2Fsome%2Fpath.jpg",
 		},
 	}
 	for _, tt := range tests {
@@ -379,9 +379,9 @@ func Test_sshURLFromClone_derivesFromHTTPHost(t *testing.T) {
 		repo  string
 		want  string
 	}{
-		{"atomgit https", "https://atomgit.com/jetsung/testci.git", "jetsung", "testci", "git@atomgit.com:jetsung/testci.git"},
-		{"atomgit http", "http://atomgit.com/jetsung/testci.git", "jetsung", "testci", "git@atomgit.com:jetsung/testci.git"},
-		{"same as http host", "https://atomgit.com/jetsung/testci.git", "jetsung", "testci", "git@atomgit.com:jetsung/testci.git"},
+		{"gitcode https", "https://gitcode.com/jetsung/testci.git", "jetsung", "testci", "git@gitcode.com:jetsung/testci.git"},
+		{"gitcode http", "http://gitcode.com/jetsung/testci.git", "jetsung", "testci", "git@gitcode.com:jetsung/testci.git"},
+		{"same as http host", "https://gitcode.com/jetsung/testci.git", "jetsung", "testci", "git@gitcode.com:jetsung/testci.git"},
 		{"empty clone", "", "jetsung", "testci", ""},
 	}
 	for _, c := range cases {
@@ -392,7 +392,7 @@ func Test_sshURLFromClone_derivesFromHTTPHost(t *testing.T) {
 	}
 }
 
-func Test_atomgit_Dir_filtering(t *testing.T) {
+func Test_gitcode_Dir_filtering(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	var gotRefName string
@@ -431,9 +431,9 @@ func Test_atomgit_Dir_filtering(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// Test_atomgit_Dir_objectArray verifies Dir() parses the object-array
+// Test_gitcode_Dir_objectArray verifies Dir() parses the object-array
 // file_list shape ([{"path":...}]) and only fetches the matching config.
-func Test_atomgit_Dir_objectArray(t *testing.T) {
+func Test_gitcode_Dir_objectArray(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	var gotRefName string
@@ -463,11 +463,11 @@ func Test_atomgit_Dir_objectArray(t *testing.T) {
 	assert.Equal(t, "master", gotRefName)
 }
 
-// Test_atomgit_Dir_configExtensions verifies the directory listing honours the
+// Test_gitcode_Dir_configExtensions verifies the directory listing honours the
 // operator-configured extension set, and falls back to .yaml/.yml when unset.
 // Filtering on an empty configured set would discard everything and leave the
 // repository with no pipelines at all.
-func Test_atomgit_Dir_configExtensions(t *testing.T) {
+func Test_gitcode_Dir_configExtensions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	mux := http.NewServeMux()
@@ -510,12 +510,12 @@ func Test_atomgit_Dir_configExtensions(t *testing.T) {
 	assert.Equal(t, ".woodpecker/build.yml", files[0].Name)
 }
 
-// Test_atomgit_Dir_branchDivergence is the regression test for the bug where
+// Test_gitcode_Dir_branchDivergence is the regression test for the bug where
 // Dir() sent ?ref= to /file_list. That endpoint only accepts ref_name, so
-// AtomGit silently ignored the unknown parameter and returned the default
+// GitCode silently ignored the unknown parameter and returned the default
 // branch tree: pushing to a branch with extra pipeline configs only ever
 // triggered the workflows that also existed on the default branch.
-func Test_atomgit_Dir_branchDivergence(t *testing.T) {
+func Test_gitcode_Dir_branchDivergence(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	const developSHA = "b1946ac92492d2347c6235b4d2611184"
@@ -558,10 +558,10 @@ func Test_atomgit_Dir_branchDivergence(t *testing.T) {
 	assert.Equal(t, ".woodpecker/go.yml", files[0].Name)
 }
 
-// Test_atomgit_File_usesRefParam pins File() to the ref query parameter.
+// Test_gitcode_File_usesRefParam pins File() to the ref query parameter.
 // /raw/{path} takes ref while /file_list takes ref_name, so the Dir() fix must
 // not be applied to both endpoints.
-func Test_atomgit_File_usesRefParam(t *testing.T) {
+func Test_gitcode_File_usesRefParam(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	var gotRef, gotRefName string
@@ -585,10 +585,10 @@ func Test_atomgit_File_usesRefParam(t *testing.T) {
 	assert.Empty(t, gotRefName)
 }
 
-// Test_atomgit_File_subfolderPath verifies that File() escapes each path
+// Test_gitcode_File_subfolderPath verifies that File() escapes each path
 // segment while preserving the forward slashes, so a subfolder raw URL like
 // /raw/dotnet/dotnet.csproj reaches the backend router (not %2F-encoded).
-func Test_atomgit_File_subfolderPath(t *testing.T) {
+func Test_gitcode_File_subfolderPath(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	var gotRawPath string

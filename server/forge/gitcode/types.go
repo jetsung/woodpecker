@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package atomgit
+package gitcode
 
 import (
 	"encoding/json"
@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-// id is a AtomGit identifier. AtomGit serializes identifiers (user id,
+// id is a GitCode identifier. GitCode serializes identifiers (user id,
 // repository id, hook id, merge request iid, ...) as opaque hex strings, while
 // the local fixtures use JSON numbers. This type accepts both encodings and
 // always stores the value as a string so it passes through to
@@ -55,16 +55,16 @@ func (i id) String() string { return string(i) }
 
 // Int64 parses the identifier as a base-10 integer when it is numeric.
 // It is provided only for callers that need an integer (e.g. building URLs);
-// AtomGit hex ids are not numeric and callers should prefer String().
+// GitCode hex ids are not numeric and callers should prefer String().
 func (i id) Int64() int64 {
 	n, _ := strconv.ParseInt(string(i), 10, 64)
 	return n
 }
 
-// boolInt decodes a AtomGit boolean flag that may arrive either as a JSON
+// boolInt decodes a GitCode boolean flag that may arrive either as a JSON
 // boolean (e.g. true) or as an integer (e.g. 0 / 1). It is used for fields
 // like repository.public / repository.archived whose encoding differs between
-// the real AtomGit API and the local fixtures.
+// the real GitCode API and the local fixtures.
 type boolInt bool
 
 // UnmarshalJSON accepts both a JSON boolean and a 0/1 integer.
@@ -94,7 +94,7 @@ func (b *boolInt) UnmarshalJSON(data []byte) error {
 // Bool returns the underlying boolean value.
 func (b boolInt) Bool() bool { return bool(b) }
 
-// namespace represents the namespace (owner) of a repository on AtomGit.
+// namespace represents the namespace (owner) of a repository on GitCode.
 type namespace struct {
 	ID              id     `json:"id"`
 	Name            string `json:"name"`
@@ -106,7 +106,7 @@ type namespace struct {
 	VisibilityLevel int    `json:"visibility_level"`
 }
 
-// namespaceRef decodes the repository namespace, which AtomGit delivers as a
+// namespaceRef decodes the repository namespace, which GitCode delivers as a
 // bare string (the owner path, e.g. "jetsung") in webhook payloads. Some
 // responses may instead carry it as an object, so both shapes are accepted and
 // normalized to a *namespace.
@@ -145,7 +145,7 @@ type projectAccess struct {
 	AccessLevel int `json:"access_level"`
 }
 
-// user is the AtomGit user payload returned by /api/v5/user.
+// user is the GitCode user payload returned by /api/v5/user.
 type user struct {
 	ID        id     `json:"id"`
 	Username  string `json:"login"`
@@ -159,7 +159,19 @@ type user struct {
 	Company   string `json:"company"`
 }
 
-// repository is the AtomGit repository payload returned by the API. The json
+// enterprise is the GitCode enterprise/organization payload returned by
+// /orgs/{name}. Personal accounts are not served by this endpoint.
+type enterprise struct {
+	ID        id      `json:"id"`
+	Login     string  `json:"login"`
+	Name      string  `json:"name"`
+	Path      string  `json:"path"`
+	HTMLURL   string  `json:"html_url"`
+	AvatarURL string  `json:"avatar_url"`
+	Public    boolInt `json:"public"`
+}
+
+// repository is the GitCode repository payload returned by the API. The json
 // tags accept several aliased URL fields (git_http_url / git_ssh_url / web_url
 // / homepage / url and http_url_to_repo / ssh_url_to_repo / html_url) because
 // different endpoints expose different subsets of them.
@@ -195,7 +207,7 @@ type repository struct {
 	HasPullRequests   bool          `json:"has_pull_requests"`
 }
 
-// branch is the AtomGit branch payload returned by /api/v5/repos/{owner}/{repo}/branches.
+// branch is the GitCode branch payload returned by /api/v5/repos/{owner}/{repo}/branches.
 type branch struct {
 	Name      string  `json:"name"`
 	Protected bool    `json:"protected"`
@@ -204,7 +216,7 @@ type branch struct {
 	HTMLURL   string  `json:"html_url"`
 }
 
-// commit is the AtomGit commit payload.
+// commit is the GitCode commit payload.
 type commit struct {
 	ID             string    `json:"id"`
 	SHA            string    `json:"sha"`
@@ -221,7 +233,7 @@ type commit struct {
 	URL            string    `json:"url"`
 }
 
-// hook is the AtomGit webhook payload returned by the hooks API.
+// hook is the GitCode webhook payload returned by the hooks API.
 type hook struct {
 	ID                  id     `json:"id"`
 	URL                 string `json:"url"`
@@ -235,7 +247,7 @@ type hook struct {
 	CreatedAt           string `json:"created_at"`
 }
 
-// pullRequest is the AtomGit merge request payload.
+// pullRequest is the GitCode merge request payload.
 type pullRequest struct {
 	ID           id          `json:"id"`
 	IID          id          `json:"iid"`
@@ -290,9 +302,9 @@ type commitFile struct {
 	DeletedFile bool   `json:"deleted_file"`
 }
 
-// webhook push payload sent by AtomGit.
+// webhook push payload sent by GitCode.
 //
-// AtomGit delivers the actor's name under either user_name or user_username;
+// GitCode delivers the actor's name under either user_name or user_username;
 // both are accepted.
 type pushHook struct {
 	ObjectKind        string          `json:"object_kind"`
@@ -313,7 +325,7 @@ type pushHook struct {
 	TotalCommitsCount int             `json:"total_commits_count"`
 }
 
-// webhook tag push payload sent by AtomGit.
+// webhook tag push payload sent by GitCode.
 type tagPushHook struct {
 	ObjectKind        string          `json:"object_kind"`
 	EventType         string          `json:"event_name"`
@@ -361,4 +373,42 @@ type mergeRequestHook struct {
 	ObjectAttributes *pullRequest   `json:"object_attributes"`
 	Labels           []label        `json:"labels"`
 	Changes          map[string]any `json:"changes"`
+}
+
+// releaseHook is the webhook payload for release events. GitCode delivers
+// release creation as an event whose action is "released" and whose release
+// object carries tag_name / target_commitish / prerelease / name / html_url.
+type releaseHook struct {
+	Action     string      `json:"action"`
+	Release    *release    `json:"release"`
+	Project    *repository `json:"project"`
+	Repository *repository `json:"repository"`
+	Sender     *user       `json:"sender"`
+	User       *user       `json:"user"`
+}
+
+// release is the GitCode release payload carried in release webhooks.
+type release struct {
+	TagName         string `json:"tag_name"`
+	TargetCommitish string `json:"target_commitish"`
+	Prerelease      bool   `json:"prerelease"`
+	Name            string `json:"name"`
+	Body            string `json:"body"`
+	HTMLURL         string `json:"html_url"`
+	URL             string `json:"url"`
+	CreatedAt       string `json:"created_at"`
+	Author          *user  `json:"author"`
+}
+
+// commitDetail is the response for GET /repos/{owner}/{repo}/commits/{sha}.
+type commitDetail struct {
+	SHA     string        `json:"sha"`
+	ID      string        `json:"id"`
+	HTMLURL string        `json:"html_url"`
+	Files   []*commitFile `json:"files"`
+}
+
+// compareResult is the response for GET /repos/{owner}/{repo}/compare/{base}...{head}.
+type compareResult struct {
+	Files []*commitFile `json:"files"`
 }

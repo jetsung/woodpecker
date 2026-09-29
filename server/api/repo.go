@@ -103,6 +103,7 @@ func PostRepo(c *gin.Context) {
 
 	from, err := _forge.Repo(c, user, forgeRemoteID, "", "")
 	if err != nil {
+		log.Error().Err(err).Msgf("could not fetch repository %s from forge", forgeRemoteID)
 		c.String(http.StatusInternalServerError, "Could not fetch repository from forge.")
 		return
 	}
@@ -383,7 +384,7 @@ func GetRepo(c *gin.Context) {
 
 	// Lazily backfill forge-derived fields (forge_url, pr_enabled, ...) that
 	// may be missing on repos enabled before the forge driver populated them.
-	// This self-heals stale rows (e.g. AtomGit repos stored without a
+	// This self-heals stale rows (e.g. GitCode repos stored without a
 	// forge_url) without requiring a manual repair. Only triggered while the
 	// stored forge_url is empty, so the forge is contacted at most once.
 	if repo.ForgeURL == "" {

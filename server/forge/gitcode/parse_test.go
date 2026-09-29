@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package atomgit
+package gitcode
 
 import (
 	"bytes"
+	"errors"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"go.woodpecker-ci.org/woodpecker/v3/server/forge/atomgit/fixtures"
+	"go.woodpecker-ci.org/woodpecker/v3/server/forge/gitcode/fixtures"
 	"go.woodpecker-ci.org/woodpecker/v3/server/forge/types"
 	"go.woodpecker-ci.org/woodpecker/v3/server/model"
 )
@@ -34,22 +36,22 @@ func newHookRequest(event, body string) *http.Request {
 }
 
 // newHookRequestGitCodeRaw builds a request with the exact header value
-// AtomGit sends on GitCode-transport push deliveries, i.e. "Push Hook" (with a
+// GitCode sends on GitCode-transport push deliveries, i.e. "Push Hook" (with a
 // space and capitalized), to verify normalization to the internal "push" type.
 func newHookRequestGitCodeRaw(event, body string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/hook", bytes.NewBufferString(body))
 	req.Header = http.Header{}
-	req.Header.Set(hookEventGitCode, event)
+	req.Header.Set(hookEvent, event)
 	req.Header.Set(hookUserAgent, "git-gitcode-hook")
 	return req
 }
 
-// newHookRequestGitCode builds a request carrying the AtomGit GitCode-transport
+// newHookRequestGitCode builds a request carrying the GitCode GitCode-transport
 // X-GitCode-Event header and the git-gitcode-hook User-Agent.
 func newHookRequestGitCode(event, body string) *http.Request {
 	req, _ := http.NewRequest(http.MethodPost, "/hook", bytes.NewBufferString(body))
 	req.Header = http.Header{}
-	req.Header.Set(hookEventGitCode, event)
+	req.Header.Set(hookEvent, event)
 	req.Header.Set(hookUserAgent, "git-gitcode-hook")
 	return req
 }
@@ -67,7 +69,7 @@ func TestParsePushHook(t *testing.T) {
 }
 
 // TestParsePushHookGitCodeHeader verifies the GitCode-transport
-// X-GitCode-Event header is accepted alongside the X-AtomGit-Event header,
+// X-GitCode-Event header is accepted alongside the X-GitCode-Event header,
 // so hooks fire regardless of which transport delivered them.
 func TestParsePushHookGitCodeHeader(t *testing.T) {
 	repo, pipeline, err := parseHook(newHookRequestGitCode(hookPush, fixtures.HookPush))
@@ -78,7 +80,7 @@ func TestParsePushHookGitCodeHeader(t *testing.T) {
 	assert.Equal(t, "da1560886d4f094c3e6c9ef40349f7d38b5d27d7", pipeline.Commit)
 }
 
-// TestParsePushHookGitCodeRawHeader verifies the exact header value AtomGit
+// TestParsePushHookGitCodeRawHeader verifies the exact header value GitCode
 // sends on GitCode-transport push ("Push Hook", capitalized with a space) is
 // normalized to the internal "push" event and parsed into a pipeline, instead
 // of being ignored.
@@ -94,7 +96,7 @@ func TestParsePushHookGitCodeRawHeader(t *testing.T) {
 
 // TestParsePushHookGitCodeBody verifies the GitCode-transport push payload
 // (user_username, git_http_url / git_ssh_url / web_url / homepage, gitcode.com
-// domain) is parsed identically to the AtomGit-style payload: the clone URL,
+// domain) is parsed identically to the GitCode-style payload: the clone URL,
 // forge URL, branch and changed files are all derived correctly.
 func TestParsePushHookGitCodeBody(t *testing.T) {
 	repo, pipeline, err := parseHook(newHookRequest(hookPush, fixtures.HookPushGitCode))
@@ -248,3 +250,54 @@ func TestPipelineFromMergeRequestMissingHTMLURLSynthesizesMRURL(t *testing.T) {
 	assert.Equal(t, "https://gitcode.com/jetsung/ci-demo/-/merge_requests/1", pipeline.ForgeURL)
 }
 
+
+// TestParseReleaseHook verifies release creation triggers a release pipeline.
+func TestParseReleaseHook(t *testing.T) {
+	req := newHookRequest("Release Hook", fixtures.HookRelease)
+	repo, pipeline, err := parseHook(req)
+	require.NoError(t, err)
+	require.NotNil(t, repo)
+	require.NotNil(t, pipeline)
+	assert.Equal(t, model.EventRelease, pipeline.Event)
+	assert.Equal(t, "refs/tags/v1.2.3", pipeline.Ref)
+	assert.Equal(t, "v1.2.3", pipeline.TagTitle)
+	require.NotNil(t, pipeline.Release)
+	assert.Equal(t, "v1.2.3", pipeline.Release.Title)
+	assert.False(t, pipeline.Release.IsPrerelease)
+}
+
+// TestParseReleaseHookNonReleasedIgnored verifies non-released action is ignored.
+func TestParseReleaseHookNonReleasedIgnored(t *testing.T) {
+	req := newHookRequest("Release Hook", fixtures.HookReleaseDraft)
+	_, _, err := parseHook(req)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, &types.ErrIgnoreEvent{}))
+}
+
+// TestParsePushTagViaPushHook verifies push with refs/tags ref produces tag pipeline.
+func TestParsePushTagViaPushHook(t *testing.T) {
+	req := newHookRequest(hookPush, fixtures.HookPushTag)
+	repo, pipeline, err := parseHook(req)
+	require.NoError(t, err)
+	require.NotNil(t, repo)
+	require.NotNil(t, pipeline)
+	assert.Equal(t, model.EventTag, pipeline.Event)
+	assert.Equal(t, "refs/tags/v1.0.0", pipeline.Ref)
+}
+
+// TestParseMergeRequestUnsupportedActionIgnored verifies unsupported MR action returns ErrIgnoreEvent.
+func TestParseMergeRequestUnsupportedActionIgnored(t *testing.T) {
+	payload := `{"object_kind":"merge_request","event_name":"merge_request_labeled","project":{"id":15,"full_name":"test_name/repo_name","html_url":"https://gitcode.com/test_name/repo_name"},"object_attributes":{"id":99,"iid":1,"target_branch":"master","source_branch":"feature","title":"Add feature","state":"opened"}}`
+	req := newHookRequest(hookMergeRequest, payload)
+	_, _, err := parseHook(req)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, &types.ErrIgnoreEvent{}))
+}
+
+// TestParseDeploymentIgnored verifies deployment hook is ignored.
+func TestParseDeploymentIgnored(t *testing.T) {
+	req := newHookRequest("deployment", "{}")
+	_, _, err := parseHook(req)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, &types.ErrIgnoreEvent{}))
+}

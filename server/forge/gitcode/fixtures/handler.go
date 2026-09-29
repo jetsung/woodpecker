@@ -13,15 +13,16 @@
 // limitations under the License.
 
 package fixtures
-
 import (
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 // Handler returns an http.Handler that is capable of handling a variety of mock
-// AtomGit requests and returning mock responses.
+// GitCode requests and returning mock responses.
 func Handler() http.Handler {
 	gin.SetMode(gin.TestMode)
 
@@ -31,7 +32,7 @@ func Handler() http.Handler {
 	e.GET("/api/v5/repos/:owner/:name", getRepo)
 	e.GET("/api/v5/repositories/:id", getRepoByID)
 	e.GET("/api/v5/repos/:owner/:name/raw/:file", getRepoFile)
-	e.GET("/api/v5/repos/:owner/:name/branches/:branch", getBranch)
+	e.GET("/api/v5/repos/:owner/:name/branches/*branch", getBranch)
 	e.POST("/api/v5/repos/:owner/:name/hooks", createRepoHook)
 	e.GET("/api/v5/repos/:owner/:name/hooks", listRepoHooks)
 	e.DELETE("/api/v5/repos/:owner/:name/hooks/:id", deleteRepoHook)
@@ -71,11 +72,18 @@ func getRepoFile(c *gin.Context) {
 }
 
 // getBranch returns a branch whose embedded commit carries an "id" but no
-// "url" field, matching AtomGit's real branch endpoint. This exercises the
+// "url" field, matching GitCode's real branch endpoint. This exercises the
 // BranchHead commit-URL synthesis path used by manually triggered pipelines.
 func getBranch(c *gin.Context) {
+	branch := c.Param("branch")
+	// With "/*branch", gin includes leading slash; strip it.
+	branch = strings.TrimPrefix(branch, "/")
+	// Decode percent-encoding for branches containing slashes.
+	if decoded, err := url.PathUnescape(branch); err == nil {
+		branch = decoded
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"name": c.Param("branch"),
+		"name": branch,
 		"commit": gin.H{
 			"id": "8240e6b568",
 		},
@@ -121,10 +129,10 @@ var userPayload = gin.H{
 	"id":         1,
 	"username":   "someuser",
 	"name":       "Some User",
-	"email":      "someuser@atomgit.com",
+	"email":      "someuser@gitcode.com",
 	"state":      "active",
-	"avatar_url": "https://atomgit.com/avatar.png",
-	"html_url":   "https://atomgit.com/someuser",
+	"avatar_url": "https://gitcode.com/avatar.png",
+	"html_url":   "https://gitcode.com/someuser",
 }
 
 var repoPayload = gin.H{

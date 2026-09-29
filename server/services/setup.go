@@ -158,16 +158,16 @@ func setupForgeService(c *cli.Command, _store store.Store) error {
 		if _forge.URL == "" {
 			_forge.URL = "https://try.gitea.com"
 		}
-	case c.Bool("atomgit"):
-		_forge.Type = model.ForgeTypeAtomGit
+	case c.Bool("gitcode"):
+		_forge.Type = model.ForgeTypeGitCode
 		if _forge.URL == "" {
-			_forge.URL = "https://api.atomgit.com"
+			_forge.URL = "https://api.gitcode.com"
 		}
-		// The AtomGit API host (api.atomgit.com) returns correct clone URLs,
-		// but its OAuth endpoints live on the web host (atomgit.com). Point
+		// The GitCode API host (api.gitcode.com) returns correct clone URLs,
+		// but its OAuth endpoints live on the web host (gitcode.com). Point
 		// OAuth there unless explicitly overridden.
 		if _forge.OAuthHost == "" {
-			_forge.OAuthHost = "https://atomgit.com"
+			_forge.OAuthHost = "https://gitcode.com"
 		}
 	case c.Bool("forgejo"):
 		_forge.Type = model.ForgeTypeForgejo

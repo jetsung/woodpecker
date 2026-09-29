@@ -2,7 +2,7 @@
 
 ## Supported features
 
-| Feature                                                                                                                | [GitHub](20-github.md) | [Gitea](30-gitea.md) | [Forgejo](35-forgejo.md) | [Gitlab](40-gitlab.md) | [Bitbucket](50-bitbucket.md) | [Bitbucket Datacenter](60-bitbucket_datacenter.md) | [AtomGit](25-atomgit.md) |
+| Feature                                                                                                                | [GitHub](20-github.md) | [Gitea](30-gitea.md) | [Forgejo](35-forgejo.md) | [Gitlab](40-gitlab.md) | [Bitbucket](50-bitbucket.md) | [Bitbucket Datacenter](60-bitbucket_datacenter.md) | [GitCode](25-gitcode.md) |
 | ---------------------------------------------------------------------------------------------------------------------- | ---------------------- | -------------------- | ------------------------ | ---------------------- | ---------------------------- | -------------------------------------------------- | ------------------------ |
 | Event: Push                                                                                                            | :white_check_mark:     | :white_check_mark:   | :white_check_mark:       | :white_check_mark:     | :white_check_mark:           | :white_check_mark:                                 | :white_check_mark:       |
 | Event: Tag                                                                                                             | :white_check_mark:     | :white_check_mark:   | :white_check_mark:       | :white_check_mark:     | :white_check_mark:           | :white_check_mark:                                 | :white_check_mark:       |

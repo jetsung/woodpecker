@@ -6276,7 +6276,7 @@ const docTemplate = `{
                 "forgejo",
                 "bitbucket",
                 "bitbucket-dc",
-                "atomgit",
+                "gitcode",
                 "addon"
             ],
             "x-enum-varnames": [
@@ -6286,7 +6286,7 @@ const docTemplate = `{
                 "ForgeTypeForgejo",
                 "ForgeTypeBitbucket",
                 "ForgeTypeBitbucketDatacenter",
-                "ForgeTypeAtomGit",
+                "ForgeTypeGitCode",
                 "ForgeTypeAddon"
             ]
         },

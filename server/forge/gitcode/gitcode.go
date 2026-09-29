@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package atomgit
+package gitcode
 
 import (
 	"context"
@@ -49,8 +49,8 @@ const (
 	apiPath           = "/api/v5"
 )
 
-// AtomGit implements the forge.Forge interface for https://atomgit.com.
-type AtomGit struct {
+// GitCode implements the forge.Forge interface for https://gitcode.com.
+type GitCode struct {
 	id                int64
 	url               string
 	oAuthClientID     string
@@ -60,7 +60,7 @@ type AtomGit struct {
 	pageSize          int
 }
 
-// Opts defines configuration options for the AtomGit driver.
+// Opts defines configuration options for the GitCode driver.
 type Opts struct {
 	URL               string
 	OAuthClientID     string
@@ -69,9 +69,9 @@ type Opts struct {
 	SkipVerify        bool
 }
 
-// New returns a Forge implementation that integrates with AtomGit.
+// New returns a Forge implementation that integrates with GitCode.
 func New(id int64, opts Opts) (forge.Forge, error) {
-	return &AtomGit{
+	return &GitCode{
 		id:                id,
 		url:               opts.URL,
 		oAuthClientID:     opts.OAuthClientID,
@@ -82,19 +82,19 @@ func New(id int64, opts Opts) (forge.Forge, error) {
 }
 
 // Name returns the unique identifier of this driver.
-func (c *AtomGit) Name() string { return "atomgit" }
+func (c *GitCode) Name() string { return "gitcode" }
 
 // URL returns the root url of the configured forge.
-func (c *AtomGit) URL() string { return c.url }
+func (c *GitCode) URL() string { return c.url }
 
-func (c *AtomGit) httpClient() *http.Client {
+func (c *GitCode) httpClient() *http.Client {
 	if c.skipVerify {
 		return &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
 	}
 	return &http.Client{}
 }
 
-func (c *AtomGit) oauth2Config(ctx context.Context) (*oauth2.Config, context.Context) {
+func (c *GitCode) oauth2Config(ctx context.Context) (*oauth2.Config, context.Context) {
 	publicOAuthURL := c.oAuthHost
 	if publicOAuthURL == "" {
 		publicOAuthURL = c.url
@@ -108,11 +108,11 @@ func (c *AtomGit) oauth2Config(ctx context.Context) (*oauth2.Config, context.Con
 			},
 			RedirectURL: fmt.Sprintf("%s/authorize", server.Config.Server.OAuthHost),
 		},
-		context.WithValue(ctx, oauth2.HTTPClient, httputil.WrapClient(c.httpClient(), "forge-atomgit"))
+		context.WithValue(ctx, oauth2.HTTPClient, httputil.WrapClient(c.httpClient(), "forge-gitcode"))
 }
 
-// Login authenticates a user via AtomGit OAuth2.
-func (c *AtomGit) Login(ctx context.Context, req *forge_types.OAuthRequest) (*model.User, string, error) {
+// Login authenticates a user via GitCode OAuth2.
+func (c *GitCode) Login(ctx context.Context, req *forge_types.OAuthRequest) (*model.User, string, error) {
 	config, oauth2Ctx := c.oauth2Config(ctx)
 	redirectURL := config.AuthCodeURL(req.State)
 
@@ -141,8 +141,8 @@ func (c *AtomGit) Login(ctx context.Context, req *forge_types.OAuthRequest) (*mo
 	}, redirectURL, nil
 }
 
-// Refresh refreshes the AtomGit oauth2 access token.
-func (c *AtomGit) Refresh(ctx context.Context, user *model.User) (bool, error) {
+// Refresh refreshes the GitCode oauth2 access token.
+func (c *GitCode) Refresh(ctx context.Context, user *model.User) (bool, error) {
 	config, oauth2Ctx := c.oauth2Config(ctx)
 	config.RedirectURL = ""
 
@@ -163,7 +163,7 @@ func (c *AtomGit) Refresh(ctx context.Context, user *model.User) (bool, error) {
 	return true, nil
 }
 
-func (c *AtomGit) getCurrentUser(ctx context.Context, token string) (*user, error) {
+func (c *GitCode) getCurrentUser(ctx context.Context, token string) (*user, error) {
 	out := new(user)
 	apiURL := fmt.Sprintf("%s%s/user", c.url, apiPath)
 	if err := c.get(ctx, token, apiURL, out); err != nil {
@@ -173,7 +173,7 @@ func (c *AtomGit) getCurrentUser(ctx context.Context, token string) (*user, erro
 }
 
 // Teams returns the organizations the user belongs to.
-func (c *AtomGit) Teams(ctx context.Context, u *model.User, p *model.ListOptions) ([]*model.Team, error) {
+func (c *GitCode) Teams(ctx context.Context, u *model.User, p *model.ListOptions) ([]*model.Team, error) {
 	if p.Page != 1 {
 		return nil, nil
 	}
@@ -194,7 +194,7 @@ func (c *AtomGit) Teams(ctx context.Context, u *model.User, p *model.ListOptions
 }
 
 // Repo fetches a single repository by remote ID or owner/name.
-func (c *AtomGit) Repo(ctx context.Context, u *model.User, remoteID model.ForgeRemoteID, owner, name string) (*model.Repo, error) {
+func (c *GitCode) Repo(ctx context.Context, u *model.User, remoteID model.ForgeRemoteID, owner, name string) (*model.Repo, error) {
 	// Prefer the full repository lookup by owner/name: GET /repos/:owner/:name
 	// is the only endpoint that reliably carries html_url. Resolving by id alone
 	// can return an incomplete payload (no html_url), leaving forge_url empty.
@@ -225,9 +225,9 @@ func (c *AtomGit) Repo(ctx context.Context, u *model.User, remoteID model.ForgeR
 }
 
 // getRepoByIDScan lists the authenticated user's repositories and returns the
-// one whose id matches remoteID. AtomGit does not expose a single-repo lookup
+// one whose id matches remoteID. GitCode does not expose a single-repo lookup
 // by id, so this is how Repo() resolves a remoteID without owner/name.
-func (c *AtomGit) getRepoByIDScan(ctx context.Context, u *model.User, remoteID model.ForgeRemoteID) (*model.Repo, error) {
+func (c *GitCode) getRepoByIDScan(ctx context.Context, u *model.User, remoteID model.ForgeRemoteID) (*model.Repo, error) {
 	page := 1
 	for {
 		apiURL := fmt.Sprintf("%s%s/user/repos?page=%d&per_page=100", c.url, apiPath, page)
@@ -240,10 +240,10 @@ func (c *AtomGit) getRepoByIDScan(ctx context.Context, u *model.User, remoteID m
 		}
 		for _, r := range repos {
 			if string(r.ID) == string(remoteID) {
-			// The /user/repos summary omits fields the UI needs (html_url, ...),
-			// so upgrade to the full repository object via GET /repos/:owner/:name.
-			// The summary has no namespace object, so derive owner/name from
-			// path_with_namespace / full_name.
+				// The /user/repos summary omits fields the UI needs (html_url, ...),
+				// so upgrade to the full repository object via GET /repos/:owner/:name.
+				// The summary has no namespace object, so derive owner/name from
+				// path_with_namespace / full_name.
 				fullName := r.FullName
 				if fullName == "" {
 					fullName = r.PathWithNamespace
@@ -265,7 +265,7 @@ func (c *AtomGit) getRepoByIDScan(ctx context.Context, u *model.User, remoteID m
 	return nil, forge_types.ErrRepoNotFound
 }
 
-func (c *AtomGit) getRepoByName(ctx context.Context, token, owner, name string) (*repository, error) {
+func (c *GitCode) getRepoByName(ctx context.Context, token, owner, name string) (*repository, error) {
 	apiURL := fmt.Sprintf("%s%s/repos/%s/%s", c.url, apiPath, owner, name)
 	out := new(repository)
 	if err := c.get(ctx, token, apiURL, out); err != nil {
@@ -275,7 +275,7 @@ func (c *AtomGit) getRepoByName(ctx context.Context, token, owner, name string) 
 }
 
 // Repos fetches all repositories accessible to the user.
-func (c *AtomGit) Repos(ctx context.Context, u *model.User, p *model.ListOptions) ([]*model.Repo, error) {
+func (c *GitCode) Repos(ctx context.Context, u *model.User, p *model.ListOptions) ([]*model.Repo, error) {
 	if p.Page != 1 {
 		return nil, nil
 	}
@@ -299,7 +299,7 @@ func (c *AtomGit) Repos(ctx context.Context, u *model.User, p *model.ListOptions
 }
 
 // File fetches a single file at a specific commit.
-func (c *AtomGit) File(ctx context.Context, u *model.User, r *model.Repo, b *model.Pipeline, fileName string) ([]byte, error) {
+func (c *GitCode) File(ctx context.Context, u *model.User, r *model.Repo, b *model.Pipeline, fileName string) ([]byte, error) {
 	cleanPath := strings.TrimPrefix(fileName, "/")
 	parts := strings.Split(cleanPath, "/")
 	for i, p := range parts {
@@ -311,8 +311,7 @@ func (c *AtomGit) File(ctx context.Context, u *model.User, r *model.Repo, b *mod
 	// (see Dir) uses "ref_name". This is the API contract, not an inconsistency
 	// to clean up: an unknown query parameter is silently ignored and the
 	// default branch is returned, so swapping either name produces wrong
-	// results with no error.
-	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/raw/%s?ref=%s", c.url, apiPath, r.Owner, r.Name, encoded, b.Commit)
+	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/raw/%s?ref=%s", c.url, apiPath, r.Owner, r.Name, encoded, url.QueryEscape(b.Commit))
 	body, status, err := c.getRaw(ctx, u.AccessToken, apiURL)
 	if err != nil {
 		return nil, err
@@ -327,7 +326,7 @@ func (c *AtomGit) File(ctx context.Context, u *model.User, r *model.Repo, b *mod
 }
 
 // Dir fetches all files in a directory at a specific commit.
-func (c *AtomGit) Dir(ctx context.Context, u *model.User, r *model.Repo, b *model.Pipeline, dirName string) ([]*forge_types.FileMeta, error) {
+func (c *GitCode) Dir(ctx context.Context, u *model.User, r *model.Repo, b *model.Pipeline, dirName string) ([]*forge_types.FileMeta, error) {
 	if r.Owner == "" || r.Name == "" {
 		return nil, &forge_types.ErrConfigNotFound{Configs: []string{dirName}}
 	}
@@ -341,9 +340,8 @@ func (c *AtomGit) Dir(ctx context.Context, u *model.User, r *model.Repo, b *mode
 	// /file_list also cannot be scoped to a directory (its only parameters are
 	// ref_name and file_name, a filename search), so the whole repository tree
 	// must be listed and filtered by prefix below.
-	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/file_list?ref_name=%s", c.url, apiPath, r.Owner, r.Name, b.Commit)
+	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/file_list?ref_name=%s", c.url, apiPath, r.Owner, r.Name, url.QueryEscape(b.Commit))
 	// /file_list returns either a bare JSON array of file path strings
-	// (e.g. [".woodpecker/test.yaml","README.md",...]) or an array of objects
 	// ([{"path":...,"type":...,"name":...}]) depending on the API version /
 	// fixture. Both shapes are parsed below, and the {"data": [...]} envelope is
 	// unwrapped transparently by get().
@@ -388,17 +386,40 @@ func (c *AtomGit) Dir(ctx context.Context, u *model.User, r *model.Repo, b *mode
 		return nil, &forge_types.ErrConfigNotFound{Configs: []string{dirName}}
 	}
 
-	var configs []*forge_types.FileMeta
+	fc := make(chan *forge_types.FileMeta)
+	errChan := make(chan error)
 	for _, name := range matched {
-		data, err := c.File(ctx, u, r, b, name)
-		if err != nil {
-			if errors.Is(err, &forge_types.ErrConfigNotFound{}) {
+		go func(path string) {
+			content, err := c.File(ctx, u, r, b, path)
+			if err != nil {
+				if errors.Is(err, &forge_types.ErrConfigNotFound{}) {
+					err = fmt.Errorf("git tree reported existence of file but we got: %s", err.Error())
+				}
+				errChan <- err
+			} else {
+				fc <- &forge_types.FileMeta{
+					Name: path,
+					Data: content,
+				}
+			}
+		}(name)
+	}
+
+	var configs []*forge_types.FileMeta
+	for range matched {
+		select {
+		case err := <-errChan:
+			// ErrConfigNotFound from File means the tree lied; skip it.
+			if errors.Is(err, &forge_types.ErrConfigNotFound{}) || strings.Contains(err.Error(), "git tree reported") {
 				continue
 			}
-			return nil, fmt.Errorf("multi-pipeline cannot get %s: %w", name, err)
+			return nil, err
+		case fileMeta := <-fc:
+			configs = append(configs, fileMeta)
 		}
-		configs = append(configs, &forge_types.FileMeta{Name: name, Data: data})
 	}
+	close(fc)
+	close(errChan)
 
 	if len(configs) == 0 {
 		return nil, &forge_types.ErrConfigNotFound{Configs: []string{dirName}}
@@ -426,7 +447,7 @@ func configExtensions() []string {
 	return out
 }
 
-// fileObj is the object form returned by some AtomGit /file_list responses,
+// fileObj is the object form returned by some GitCode /file_list responses,
 // where each entry carries a "path" field instead of being a bare string.
 type fileObj struct {
 	Path string `json:"path"`
@@ -468,18 +489,19 @@ func parseFileList(body []byte) ([]string, error) {
 	if len(preview) > 240 {
 		preview = preview[:240]
 	}
-	return nil, fmt.Errorf("atomgit file_list: could not decode response (body: %s)", string(preview))
+	return nil, fmt.Errorf("gitcode file_list: could not decode response (body: %s)", string(preview))
 }
 
-// Status posts pipeline status to AtomGit. AtomGit does not expose a commit
-// status API, so this is a best-effort no-op that does not block pipelines.
-func (c *AtomGit) Status(_ context.Context, _ *model.User, _ *model.Repo, _ *model.Pipeline, _ *model.Workflow) error {
-	log.Debug().Msg("atomgit does not support commit status updates; skipping")
+// Status posts pipeline status to GitCode. GitCode's OpenAPI (gitcode.yaml)
+// does not expose a commit status endpoint, so this remains a no-op that
+// records a debug log and never blocks pipeline execution.
+func (c *GitCode) Status(_ context.Context, _ *model.User, _ *model.Repo, _ *model.Pipeline, _ *model.Workflow) error {
+	log.Debug().Msg("gitcode does not support commit status updates; skipping")
 	return nil
 }
 
 // Netrc returns netrc credentials for cloning the repository.
-func (c *AtomGit) Netrc(u *model.User, r *model.Repo) (*model.Netrc, error) {
+func (c *GitCode) Netrc(u *model.User, r *model.Repo) (*model.Netrc, error) {
 	login := ""
 	token := ""
 	if u != nil {
@@ -496,12 +518,15 @@ func (c *AtomGit) Netrc(u *model.User, r *model.Repo) (*model.Netrc, error) {
 		Login:    login,
 		Password: token,
 		Machine:  host,
-		Type:     model.ForgeTypeAtomGit,
+		Type:     model.ForgeTypeGitCode,
 	}, nil
 }
 
 // Activate registers a webhook pointing to Woodpecker.
-func (c *AtomGit) Activate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
+func (c *GitCode) Activate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
+	if err := c.Deactivate(ctx, u, r, link); err != nil {
+		return err
+	}
 	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/hooks", c.url, apiPath, r.Owner, r.Name)
 	body := map[string]any{
 		"url":                   link,
@@ -523,7 +548,7 @@ func (c *AtomGit) Activate(ctx context.Context, u *model.User, r *model.Repo, li
 }
 
 // Deactivate removes the webhook if present.
-func (c *AtomGit) Deactivate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
+func (c *GitCode) Deactivate(ctx context.Context, u *model.User, r *model.Repo, link string) error {
 	hooks, err := c.listHooks(ctx, u.AccessToken, r)
 	if err != nil {
 		return err
@@ -549,9 +574,9 @@ func (c *AtomGit) Deactivate(ctx context.Context, u *model.User, r *model.Repo, 
 	return nil
 }
 
-func (c *AtomGit) listHooks(ctx context.Context, token string, r *model.Repo) ([]*hook, error) {
+func (c *GitCode) listHooks(ctx context.Context, token string, r *model.Repo) ([]*hook, error) {
 	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/hooks", c.url, apiPath, r.Owner, r.Name)
-	// AtomGit's /hooks returns a bare JSON array (the {"data": [...]} wrapper only
+	// GitCode's /hooks returns a bare JSON array (the {"data": [...]} wrapper only
 	// appears in local fixtures).
 	out := make([]*hook, 0)
 	if err := c.get(ctx, token, apiURL, &out); err != nil {
@@ -561,8 +586,8 @@ func (c *AtomGit) listHooks(ctx context.Context, token string, r *model.Repo) ([
 }
 
 // Branches returns all branch names for the repository.
-func (c *AtomGit) Branches(ctx context.Context, u *model.User, r *model.Repo, p *model.ListOptions) ([]string, error) {
-	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/branches", c.url, apiPath, r.Owner, r.Name)
+func (c *GitCode) Branches(ctx context.Context, u *model.User, r *model.Repo, p *model.ListOptions) ([]string, error) {
+	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/branches?page=%d&per_page=%d", c.url, apiPath, r.Owner, r.Name, p.Page, perPage(p.PerPage))
 	var branches []*branch
 	if err := c.get(ctx, common.UserToken(ctx, r, u), apiURL, &branches); err != nil {
 		return nil, err
@@ -575,8 +600,12 @@ func (c *AtomGit) Branches(ctx context.Context, u *model.User, r *model.Repo, p 
 }
 
 // BranchHead returns the latest commit SHA for a branch.
-func (c *AtomGit) BranchHead(ctx context.Context, u *model.User, r *model.Repo, branchName string) (*model.Commit, error) {
-	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/branches/%s", c.url, apiPath, r.Owner, r.Name, branchName)
+func (c *GitCode) BranchHead(ctx context.Context, u *model.User, r *model.Repo, branchName string) (*model.Commit, error) {
+	if branchName == "" {
+		return nil, fmt.Errorf("branch name is empty")
+	}
+	escaped := url.PathEscape(branchName)
+	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/branches/%s", c.url, apiPath, r.Owner, r.Name, escaped)
 	out := new(branch)
 	if err := c.get(ctx, common.UserToken(ctx, r, u), apiURL, out); err != nil {
 		return nil, err
@@ -614,8 +643,8 @@ func (c *AtomGit) BranchHead(ctx context.Context, u *model.User, r *model.Repo, 
 }
 
 // PullRequests returns open pull requests for the repository.
-func (c *AtomGit) PullRequests(ctx context.Context, u *model.User, r *model.Repo, p *model.ListOptions) ([]*model.PullRequest, error) {
-	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/pulls?state=open", c.url, apiPath, r.Owner, r.Name)
+func (c *GitCode) PullRequests(ctx context.Context, u *model.User, r *model.Repo, p *model.ListOptions) ([]*model.PullRequest, error) {
+	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/pulls?state=open&page=%d&per_page=%d", c.url, apiPath, r.Owner, r.Name, p.Page, perPage(p.PerPage))
 	var prs []*pullRequest
 	if err := c.get(ctx, common.UserToken(ctx, r, u), apiURL, &prs); err != nil {
 		return nil, err
@@ -630,28 +659,47 @@ func (c *AtomGit) PullRequests(ctx context.Context, u *model.User, r *model.Repo
 	return result, nil
 }
 
-// Hook parses an incoming AtomGit webhook.
-func (c *AtomGit) Hook(ctx context.Context, r *http.Request) (*model.Repo, *model.Pipeline, error) {
+// Hook parses an incoming GitCode webhook.
+func (c *GitCode) Hook(ctx context.Context, r *http.Request) (*model.Repo, *model.Pipeline, error) {
 	repo, pipeline, err := parseHook(r)
 	if err != nil {
 		return nil, nil, err
 	}
+	if pipeline == nil {
+		return repo, nil, nil
+	}
 
-	if pipeline != nil && pipeline.IsPullRequest() && len(pipeline.ChangedFiles) == 0 {
-		index, err := strconv.ParseInt(strings.Split(pipeline.Ref, "/")[2], 10, 64)
-		if err != nil {
-			return nil, nil, err
+	// PR: backfill changed files when payload did not carry them.
+	if pipeline.IsPullRequest() && len(pipeline.ChangedFiles) == 0 {
+		index, perr := strconv.ParseInt(strings.Split(pipeline.Ref, "/")[2], 10, 64)
+		if perr != nil {
+			return nil, nil, perr
 		}
 		pipeline.ChangedFiles, err = c.getChangedFilesForPR(ctx, repo, index)
 		if err != nil {
 			log.Error().Err(err).Msgf("could not get changed files for PR %s#%d", repo.FullName, index)
+		}
+	} else if pipeline.Event == model.EventPush {
+		// Push: enrich changed files via commit/compare API when possible.
+		// Use after/before from the webhook; GitCode push payload carries them
+		// as after/before, but parseHook already materialized them into pipeline.Commit
+		// plus the enriched hook body is no longer available here, so we fall back
+		// to a best-effort: if pipeline.ChangedFiles is empty, try to fetch via
+		// the pipeline's commit alone. Full before/after enrichment would require
+		// plumbing curr/prev through parseHook like GitHub does.
+		if len(pipeline.ChangedFiles) == 0 && pipeline.Commit != "" {
+			if enriched, lerr := c.loadChangedFilesFromCommits(ctx, repo, pipeline, pipeline.Commit, ""); lerr == nil {
+				pipeline = enriched
+			} else {
+				log.Error().Err(lerr).Msgf("could not get changed files for push %s@%s", repo.FullName, pipeline.Commit)
+			}
 		}
 	}
 
 	return repo, pipeline, nil
 }
 
-func (c *AtomGit) getChangedFilesForPR(ctx context.Context, repo *model.Repo, index int64) ([]string, error) {
+func (c *GitCode) getChangedFilesForPR(ctx context.Context, repo *model.Repo, index int64) ([]string, error) {
 	_store, ok := store.TryFromContext(ctx)
 	if !ok {
 		log.Error().Msg("could not get store from context")
@@ -685,9 +733,91 @@ func (c *AtomGit) getChangedFilesForPR(ctx context.Context, repo *model.Repo, in
 	}
 	return changed, nil
 }
+func (c *GitCode) loadChangedFilesFromCommits(ctx context.Context, tmpRepo *model.Repo, pipeline *model.Pipeline, curr, prev string) (*model.Pipeline, error) {
+	_store, ok := store.TryFromContext(ctx)
+	if !ok {
+		log.Error().Msg("could not get store from context")
+		return pipeline, nil
+	}
+
+	switch prev {
+	case curr:
+		log.Error().Msg("push event contains the same commit before and after, no changes detected")
+		return pipeline, nil
+	case "0000000000000000000000000000000000000000":
+		prev = ""
+		fallthrough
+	case "":
+		log.Trace().Msg("force push or tag event, fetching changed files using current commit")
+	}
+
+	repo, err := _store.GetRepoNameFallback(c.id, tmpRepo.ForgeRemoteID, tmpRepo.FullName)
+	if err != nil {
+		return nil, err
+	}
+	user, err := _store.GetUser(repo.UserID)
+	if err != nil {
+		return nil, err
+	}
+	forge.Refresh(ctx, c, _store, user)
+
+	if prev == "" {
+		// Single commit: GET /repos/{owner}/{repo}/commits/{sha}
+		apiURL := fmt.Sprintf("%s%s/repos/%s/%s/commits/%s", c.url, apiPath, repo.Owner, repo.Name, url.PathEscape(curr))
+		var detail commitDetail
+		if err := c.get(ctx, user.AccessToken, apiURL, &detail); err != nil {
+			return nil, err
+		}
+		files := make([]string, 0, len(detail.Files)*2)
+		for _, f := range detail.Files {
+			if f.NewPath != "" {
+				files = append(files, f.NewPath)
+			}
+			if f.OldPath != "" {
+				files = append(files, f.OldPath)
+			}
+		}
+		// Also handle alternative field names if GitCode uses different keys
+		pipeline.ChangedFiles = deduplicateStrings(files)
+		return pipeline, nil
+	}
+
+	// Compare: GET /repos/{owner}/{repo}/compare/{base}...{head}
+	apiURL := fmt.Sprintf("%s%s/repos/%s/%s/compare/%s...%s", c.url, apiPath, repo.Owner, repo.Name, url.PathEscape(prev), url.PathEscape(curr))
+	var cmp compareResult
+	if err := c.get(ctx, user.AccessToken, apiURL, &cmp); err != nil {
+		return nil, err
+	}
+	files := make([]string, 0, len(cmp.Files)*2)
+	for _, f := range cmp.Files {
+		if f.NewPath != "" {
+			files = append(files, f.NewPath)
+		}
+		if f.OldPath != "" {
+			files = append(files, f.OldPath)
+		}
+	}
+	pipeline.ChangedFiles = deduplicateStrings(files)
+	return pipeline, nil
+}
+
+func deduplicateStrings(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	return out
+}
 
 // OrgMembership checks if the user is a member of the organization.
-func (c *AtomGit) OrgMembership(ctx context.Context, u *model.User, org string) (*model.OrgPerm, error) {
+func (c *GitCode) OrgMembership(ctx context.Context, u *model.User, org string) (*model.OrgPerm, error) {
 	apiURL := fmt.Sprintf("%s%s/orgs/%s/members/%s", c.url, apiPath, org, u.Login)
 	_, status, err := c.getRaw(ctx, u.AccessToken, apiURL)
 	if err != nil {
@@ -699,17 +829,27 @@ func (c *AtomGit) OrgMembership(ctx context.Context, u *model.User, org string) 
 	if status >= http.StatusBadRequest {
 		return &model.OrgPerm{}, nil
 	}
-	// AtomGit does not expose detailed permission levels via this endpoint;
-	// membership is enough to return admin capability conservatively.
-	return &model.OrgPerm{Member: true, Admin: false}, nil
+	// GitCode's membership endpoint carries no permission levels, so a
+	// member is returned as admin too: org secret/registry management
+	// (MustOrgMember(true)) would otherwise be unusable for org repos.
+	return &model.OrgPerm{Member: true, Admin: true}, nil
 }
 
-// Org fetches an organization (or user) from AtomGit.
-func (c *AtomGit) Org(ctx context.Context, u *model.User, org string) (*model.Org, error) {
+// Org fetches an organization (or user) from GitCode.
+func (c *GitCode) Org(ctx context.Context, u *model.User, org string) (*model.Org, error) {
 	apiURL := fmt.Sprintf("%s%s/users/%s", c.url, apiPath, org)
 	out := new(user)
 	if err := c.get(ctx, u.AccessToken, apiURL, out); err != nil {
-		return nil, err
+		// /users/{name} only covers personal accounts; an enterprise namespace
+		// returns 404 there ("用户不存在"), so fall back to /orgs/{name}.
+		orgOut := new(enterprise)
+		if err2 := c.get(ctx, u.AccessToken, fmt.Sprintf("%s%s/orgs/%s", c.url, apiPath, org), orgOut); err2 != nil {
+			return nil, err
+		}
+		return &model.Org{
+			Name:    orgOut.Login,
+			Private: !orgOut.Public.Bool(),
+		}, nil
 	}
 	return &model.Org{
 		Name:   out.Username,
@@ -719,7 +859,7 @@ func (c *AtomGit) Org(ctx context.Context, u *model.User, org string) (*model.Or
 
 // --- HTTP helpers ---
 
-func (c *AtomGit) request(ctx context.Context, method, token, apiURL string, body io.Reader) (*http.Response, error) {
+func (c *GitCode) request(ctx context.Context, method, token, apiURL string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, apiURL, body)
 	if err != nil {
 		return nil, err
@@ -727,11 +867,11 @@ func (c *AtomGit) request(ctx context.Context, method, token, apiURL string, bod
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
-	client := httputil.WrapClient(c.httpClient(), "forge-atomgit")
+	client := httputil.WrapClient(c.httpClient(), "forge-gitcode")
 	return client.Do(req)
 }
 
-func (c *AtomGit) get(ctx context.Context, token, apiURL string, out any) error {
+func (c *GitCode) get(ctx context.Context, token, apiURL string, out any) error {
 	resp, err := c.request(ctx, http.MethodGet, token, apiURL, nil)
 	if err != nil {
 		return err
@@ -739,7 +879,7 @@ func (c *AtomGit) get(ctx context.Context, token, apiURL string, out any) error 
 	defer resp.Body.Close()
 	if resp.StatusCode >= http.StatusBadRequest {
 		data, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("atomgit api error: status %d: %s", resp.StatusCode, string(data))
+		return fmt.Errorf("gitcode api error: status %d: %s", resp.StatusCode, string(data))
 	}
 	if out == nil {
 		return nil
@@ -767,11 +907,11 @@ func (c *AtomGit) get(ctx context.Context, token, apiURL string, out any) error 
 		if len(preview) > 240 {
 			preview = preview[:240]
 		}
-		return fmt.Errorf("atomgit api: failed to decode response: %w (body: %s)", err, string(preview))
+		return fmt.Errorf("gitcode api: failed to decode response: %w (body: %s)", err, string(preview))
 	}
 }
 
-func (c *AtomGit) getRaw(ctx context.Context, token, apiURL string) ([]byte, int, error) {
+func (c *GitCode) getRaw(ctx context.Context, token, apiURL string) ([]byte, int, error) {
 	resp, err := c.request(ctx, http.MethodGet, token, apiURL, nil)
 	if err != nil {
 		return nil, 0, err
@@ -784,7 +924,7 @@ func (c *AtomGit) getRaw(ctx context.Context, token, apiURL string) ([]byte, int
 	return data, resp.StatusCode, nil
 }
 
-func (c *AtomGit) post(ctx context.Context, token, apiURL string, body any) ([]byte, int, error) {
+func (c *GitCode) post(ctx context.Context, token, apiURL string, body any) ([]byte, int, error) {
 	raw, err := json.Marshal(body)
 	if err != nil {
 		return nil, 0, err
@@ -798,7 +938,7 @@ func (c *AtomGit) post(ctx context.Context, token, apiURL string, body any) ([]b
 	return data, resp.StatusCode, nil
 }
 
-func (c *AtomGit) delete(ctx context.Context, token, apiURL string) ([]byte, int, error) {
+func (c *GitCode) delete(ctx context.Context, token, apiURL string) ([]byte, int, error) {
 	resp, err := c.request(ctx, http.MethodDelete, token, apiURL, nil)
 	if err != nil {
 		return nil, 0, err
@@ -806,4 +946,11 @@ func (c *AtomGit) delete(ctx context.Context, token, apiURL string) ([]byte, int
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	return data, resp.StatusCode, nil
+}
+
+func perPage(custom int) int {
+	if custom < 1 || custom > defaultPageSize {
+		return defaultPageSize
+	}
+	return custom
 }

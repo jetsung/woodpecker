@@ -1,9 +1,9 @@
-package atomgit
+package gitcode
 
 import (
 	"testing"
 
-	"go.woodpecker-ci.org/woodpecker/v3/server/forge/atomgit/fixtures"
+	"go.woodpecker-ci.org/woodpecker/v3/server/forge/gitcode/fixtures"
 )
 
 func TestDiagRepoFields(t *testing.T) {

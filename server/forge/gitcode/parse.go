@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package atomgit
+package gitcode
 
 import (
 	"encoding/json"
@@ -28,18 +28,15 @@ import (
 )
 
 const (
-	hookEvent        = "X-AtomGit-Event"
-	hookEventGitCode = "X-GitCode-Event"
-	hookUserAgent    = "User-Agent"
+	hookEvent     = "X-GitCode-Event"
+	hookUserAgent = "User-Agent"
 
-	// userAgentGitCode is the User-Agent AtomGit sends on webhook deliveries via
-	// the GitCode transport. It is used as a fallback event-source signal when
-	// the X-*-Event header is absent.
 	userAgentGitCode = "git-gitcode-hook"
 
 	hookPush         = "push"
 	hookTagPush      = "tag_push"
 	hookMergeRequest = "merge_request"
+	hookRelease      = "release"
 
 	actionOpen   = "merge_request_open"
 	actionClose  = "merge_request_close"
@@ -47,40 +44,36 @@ const (
 	actionUpdate = "merge_request_update"
 	actionReopen = "merge_request_reopen"
 
+	actionReleased = "released"
+
 	refBranch = "branch"
 	refTag    = "tag"
 )
 
-// hookEventType resolves the AtomGit webhook event type from the request.
-// Webhooks may arrive with either the X-AtomGit-Event or the X-GitCode-Event
-// header; as a last resort a GitCode User-Agent header is treated as a push.
+// hookEventType resolves the GitCode webhook event type from the request.
 func hookEventType(r *http.Request) string {
-	var event string
 	if e := r.Header.Get(hookEvent); e != "" {
-		event = e
-	} else if e := r.Header.Get(hookEventGitCode); e != "" {
-		event = e
-	} else if strings.Contains(strings.ToLower(r.Header.Get(hookUserAgent)), userAgentGitCode) {
-		// Fallback: GitCode identifies hook deliveries via the User-Agent header.
-		return hookPush
-	} else {
-		return ""
+		switch {
+		case strings.EqualFold(e, "Push Hook"):
+			return hookPush
+		case strings.EqualFold(e, "Tag Push Hook"):
+			return hookTagPush
+		case strings.EqualFold(e, "Merge Request Hook"):
+			return hookMergeRequest
+		case strings.EqualFold(e, "Release Hook"):
+			return hookRelease
+		case strings.EqualFold(e, "Deployment Hook"), strings.EqualFold(e, "deployment"):
+			return "deployment"
+		}
+		return e
 	}
-
-	// Normalize header values such as "Push Hook" to the internal lowercase
-	// event types; already-lowercase values pass through unchanged.
-	switch {
-	case strings.EqualFold(event, "Push Hook"):
+	if strings.Contains(strings.ToLower(r.Header.Get(hookUserAgent)), userAgentGitCode) {
 		return hookPush
-	case strings.EqualFold(event, "Tag Push Hook"):
-		return hookTagPush
-	case strings.EqualFold(event, "Merge Request Hook"):
-		return hookMergeRequest
 	}
-	return event
+	return ""
 }
 
-// parseHook parses a AtomGit webhook from an http.Request and returns the
+// parseHook parses a GitCode webhook from an http.Request and returns the
 // Repo and Pipeline detail. If a hook type is unsupported nil values are returned.
 func parseHook(r *http.Request) (*model.Repo, *model.Pipeline, error) {
 	hookType := hookEventType(r)
@@ -91,8 +84,12 @@ func parseHook(r *http.Request) (*model.Repo, *model.Pipeline, error) {
 		return parseTagPushHook(r.Body)
 	case hookMergeRequest:
 		return parseMergeRequestHook(r.Body)
+	case hookRelease:
+		return parseReleaseHook(r.Body)
+	case "deployment":
+		return nil, nil, &types.ErrIgnoreEvent{Event: "deployment"}
 	}
-	log.Debug().Msgf("unsupported atomgit hook type: '%s'", hookType)
+	log.Debug().Msgf("unsupported gitcode hook type: '%s'", hookType)
 	return nil, nil, &types.ErrIgnoreEvent{Event: hookType}
 }
 
@@ -141,9 +138,27 @@ func parsePushHook(payload io.Reader) (*model.Repo, *model.Pipeline, error) {
 		}
 	}
 
-	// ignore tag pushes handled by tag_push event
+	// A push whose ref is a tag is actually a tag event; handle it via the tag
+	// pipeline so filtering by branch still works.
 	if strings.HasPrefix(hook.Ref, "refs/tags/") {
-		return nil, nil, nil
+		repo := toRepo(hook.Repository)
+		pipeline := pipelineFromTag(&tagPushHook{
+			ObjectKind:   hook.ObjectKind,
+			EventType:    hook.EventType,
+			Before:       hook.Before,
+			After:        hook.After,
+			Ref:          hook.Ref,
+			CheckoutSHA:  hook.CheckoutSHA,
+			UserID:       hook.UserID,
+			UserName:     hook.UserName,
+			UserUsername: hook.UserUsername,
+			UserEmail:    hook.UserEmail,
+			UserAvatar:   hook.UserAvatar,
+			ProjectID:    hook.ProjectID,
+			Project:      hook.Project,
+			Repository:   hook.Repository,
+		})
+		return repo, pipeline, nil
 	}
 
 	repo := toRepo(hook.Repository)
@@ -206,8 +221,10 @@ func parseMergeRequestHook(payload io.Reader) (*model.Repo, *model.Pipeline, err
 	}
 
 	if !supportedMergeRequestAction(hook.EventType) {
-		log.Debug().Msgf("merge_request action '%s' is not supported, ignoring", hook.EventType)
-		return nil, nil, nil
+		return nil, nil, &types.ErrIgnoreEvent{
+			Event:  string(model.EventPullMetadata),
+			Reason: hook.EventType + " is not supported",
+		}
 	}
 
 	repo := toRepo(hook.Project)
@@ -222,4 +239,27 @@ func supportedMergeRequestAction(action string) bool {
 	default:
 		return false
 	}
+}
+
+func parseReleaseHook(payload io.Reader) (*model.Repo, *model.Pipeline, error) {
+	hook := new(releaseHook)
+	if err := json.NewDecoder(payload).Decode(hook); err != nil {
+		return nil, nil, err
+	}
+	if hook.Release == nil || hook.Release.TagName == "" {
+		return nil, nil, fmt.Errorf("parsed release webhook does not contain release info")
+	}
+	if hook.Action != actionReleased {
+		return nil, nil, &types.ErrIgnoreEvent{Event: string(model.EventRelease), Reason: "action " + hook.Action + " is not supported"}
+	}
+	repoSrc := hook.Project
+	if repoSrc == nil {
+		repoSrc = hook.Repository
+	}
+	if repoSrc == nil {
+		return nil, nil, fmt.Errorf("parsed release webhook does not contain repository info")
+	}
+	repo := toRepo(repoSrc)
+	pipeline := pipelineFromRelease(hook)
+	return repo, pipeline, nil
 }

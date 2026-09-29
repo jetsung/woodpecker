@@ -30,7 +30,6 @@ import (
 // (防盗链) serve the image.
 var knownCDNDomains = map[string]string{
 	"cdn-img.gitcode.com": "https://gitcode.com",
-	"cdn-img.atomgit.com": "https://atomgit.com",
 }
 
 // AvatarProxy proxies an avatar image through the Woodpecker server

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package atomgit
+package gitcode
 
 import (
 	"fmt"
@@ -23,7 +23,7 @@ import (
 	"go.woodpecker-ci.org/woodpecker/v3/shared/utils"
 )
 
-// toUser converts a AtomGit user payload to a Woodpecker user.
+// toUser converts a GitCode user payload to a Woodpecker user.
 func toUser(from *user) *model.User {
 	avatar := expandAvatar(from.HTMLURL, from.AvatarURL)
 	return &model.User{
@@ -66,7 +66,7 @@ func extractOwnerNameFromURL(rawURL string) (owner, name string) {
 	return "", ""
 }
 
-// toRepo converts a AtomGit repository payload to a Woodpecker repository.
+// toRepo converts a GitCode repository payload to a Woodpecker repository.
 func toRepo(from *repository) *model.Repo {
 	// Webhook payloads may omit "full_name" and only carry
 	// "path_with_namespace" (e.g. "jetsung/testci"), so fall back to it.
@@ -128,9 +128,9 @@ func toRepo(from *repository) *model.Repo {
 	return repo
 }
 
-// toPerm derives Woodpecker permissions from a AtomGit repository's permissions.
+// toPerm derives Woodpecker permissions from a GitCode repository's permissions.
 func toPerm(from *repository) *model.Perm {
-	// AtomGit access levels: 10 Guest, 20 Reporter, 30 Developer, 40 Maintainer, 50 Owner.
+	// GitCode access levels: 10 Guest, 20 Reporter, 30 Developer, 40 Maintainer, 50 Owner.
 	if from.Permissions == nil {
 		// The repository listing endpoint (/user/repos) does not include a
 		// permissions object. These repos are returned for the authenticated
@@ -157,7 +157,7 @@ func toPerm(from *repository) *model.Perm {
 	}
 }
 
-// toTeam converts a AtomGit namespace into a Woodpecker team.
+// toTeam converts a GitCode namespace into a Woodpecker team.
 func toTeam(from *namespace, link string) *model.Team {
 	return &model.Team{
 		Login:  from.Path,
@@ -165,7 +165,7 @@ func toTeam(from *namespace, link string) *model.Team {
 	}
 }
 
-// toOrg converts a AtomGit namespace into a Woodpecker org.
+// toOrg converts a GitCode namespace into a Woodpecker org.
 func toOrg(from *namespace) *model.Org {
 	return &model.Org{
 		Name:    from.Path,
@@ -173,7 +173,7 @@ func toOrg(from *namespace) *model.Org {
 	}
 }
 
-// pipelineFromPush converts a AtomGit push webhook into a Woodpecker pipeline.
+// pipelineFromPush converts a GitCode push webhook into a Woodpecker pipeline.
 func pipelineFromPush(hook *pushHook) *model.Pipeline {
 	avatar := expandAvatar(hook.Repository.PageURL(), hook.UserAvatar)
 	author := hook.UserName
@@ -218,7 +218,7 @@ func pipelineFromPush(hook *pushHook) *model.Pipeline {
 	}
 }
 
-// pipelineFromTag converts a AtomGit tag push webhook into a Woodpecker pipeline.
+// pipelineFromTag converts a GitCode tag push webhook into a Woodpecker pipeline.
 func pipelineFromTag(hook *tagPushHook) *model.Pipeline {
 	pageURL := hook.Repository.PageURL()
 	if pageURL == "" && hook.Project != nil {
@@ -248,7 +248,7 @@ func pipelineFromTag(hook *tagPushHook) *model.Pipeline {
 	}
 }
 
-// pipelineFromMergeRequest converts a AtomGit merge request webhook into a Woodpecker pipeline.
+// pipelineFromMergeRequest converts a GitCode merge request webhook into a Woodpecker pipeline.
 func pipelineFromMergeRequest(hook *mergeRequestHook) *model.Pipeline {
 	pr := hook.ObjectAttributes
 	pageURL := hook.Project.PageURL()
@@ -261,7 +261,9 @@ func pipelineFromMergeRequest(hook *mergeRequestHook) *model.Pipeline {
 	switch hook.EventType {
 	case actionClose, actionMerge:
 		event = model.EventPullClosed
-	case actionUpdate:
+	case actionOpen, actionReopen, actionUpdate:
+		event = model.EventPull
+	default:
 		event = model.EventPull
 	}
 
@@ -307,6 +309,58 @@ func pipelineFromMergeRequest(hook *mergeRequestHook) *model.Pipeline {
 	pipeline.PullRequestDraft = pr.Draft
 	return pipeline
 }
+// pipelineFromRelease converts a GitCode release webhook into a Woodpecker pipeline.
+func pipelineFromRelease(hook *releaseHook) *model.Pipeline {
+	rel := hook.Release
+	tag := rel.TagName
+	title := rel.Name
+	if title == "" {
+		title = tag
+	}
+	pageURL := ""
+	if hook.Project != nil {
+		pageURL = hook.Project.PageURL()
+	} else if hook.Repository != nil {
+		pageURL = hook.Repository.PageURL()
+	}
+	forgeURL := rel.HTMLURL
+	if forgeURL == "" && pageURL != "" && tag != "" {
+		forgeURL = fmt.Sprintf("%s/-/releases/%s", pageURL, tag)
+	}
+	author := ""
+	avatar := expandAvatar(pageURL, "")
+	email := ""
+	sender := ""
+	if rel.Author != nil {
+		author = authorLogin(rel.Author)
+		avatar = expandAvatar(pageURL, rel.Author.AvatarURL)
+		email = authorEmail(rel.Author)
+	}
+	if hook.Sender != nil {
+		sender = authorLogin(hook.Sender)
+	} else if hook.User != nil {
+		sender = authorLogin(hook.User)
+	}
+	if sender == "" {
+		sender = author
+	}
+	branch := rel.TargetCommitish
+	return &model.Pipeline{
+		Event:    model.EventRelease,
+		Ref:      fmt.Sprintf("refs/tags/%s", tag),
+		ForgeURL: forgeURL,
+		Branch:   branch,
+		TagTitle: tag,
+		Release: &model.Release{
+			Title:        title,
+			IsPrerelease: rel.Prerelease,
+		},
+		Author: author,
+		Avatar: avatar,
+		Email:  email,
+		Sender: sender,
+	}
+}
 
 func authorLogin(u *user) string {
 	if u == nil {
@@ -341,7 +395,7 @@ func getChangedFilesFromPushHook(hook *pushHook) []string {
 	return utils.DeduplicateStrings(files)
 }
 
-// HTTPURL returns the HTTP clone URL of a repository. AtomGit returns the
+// HTTPURL returns the HTTP clone URL of a repository. GitCode returns the
 // clone URL under either http_url_to_repo or git_http_url, with web_url as a
 // last resort; the first present value wins.
 func (r *repository) HTTPURL() string {
@@ -354,7 +408,7 @@ func (r *repository) HTTPURL() string {
 	return r.WebURL
 }
 
-// PageURL returns the repository's web page URL. AtomGit returns it under one
+// PageURL returns the repository's web page URL. GitCode returns it under one
 // of html_url / web_url / homepage / url; the first present value wins.
 func (r *repository) PageURL() string {
 	switch {
@@ -391,7 +445,6 @@ func sshURLFromClone(clone, owner, name string) string {
 // through the Woodpecker avatar proxy with the matching Referer header.
 var knownCDNHosts = map[string]string{
 	"cdn-img.gitcode.com": "https://gitcode.com",
-	"cdn-img.atomgit.com": "https://atomgit.com",
 }
 
 // expandAvatar resolves a possibly-relative avatar URL against the base URL.
